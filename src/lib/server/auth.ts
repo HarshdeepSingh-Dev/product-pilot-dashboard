@@ -1,0 +1,5 @@
+import 'server-only'; import {cookies} from 'next/headers'; import {SignJWT,jwtVerify} from 'jose'; import bcrypt from 'bcryptjs';
+const key=()=>new TextEncoder().encode(process.env.SESSION_SECRET||''); const COOKIE='inventory_session';
+export async function login(password:string){const hash=process.env.DASHBOARD_PASSWORD_HASH;if(!hash||!process.env.SESSION_SECRET||!await bcrypt.compare(password,hash))return false;const token=await new SignJWT({actor:'operator',v:hash.slice(0,12)}).setProtectedHeader({alg:'HS256'}).setIssuedAt().setExpirationTime('8h').sign(key());(await cookies()).set(COOKIE,token,{httpOnly:true,sameSite:'lax',secure:process.env.NODE_ENV==='production',path:'/',maxAge:28800});return true}
+export async function authenticated(){try{const c=(await cookies()).get(COOKIE)?.value;const h=process.env.DASHBOARD_PASSWORD_HASH;if(!c||!h||!process.env.SESSION_SECRET)return false;const {payload}=await jwtVerify(c,key());return payload.actor==='operator'&&payload.v===h.slice(0,12)}catch{return false}}
+export async function logout(){(await cookies()).delete(COOKIE)}

@@ -1,0 +1,2 @@
+import { expenses } from '@/lib/server/reads'; import { OperationForm } from '@/features/operations/forms';
+export default async function Expenses() { const rows = await expenses(); return <section><h1 className="text-3xl font-bold">Expenses</h1><div className="mt-5 grid grid-cols-1 gap-5 xl:grid-cols-2"><OperationForm kind="expense" disabled={!process.env.MONGODB_URI} /><div className="card"><p className="text-xl font-bold">{rows.length}</p><p className="text-slate-600">expenses recorded.</p></div></div></section>; }

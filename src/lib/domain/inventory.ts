@@ -1,0 +1,5 @@
+export type Balance = { available:number; damaged:number; revision:number };
+export type Correction = Balance & { delta:number };
+export function correction(balance:Balance,target:number,expectedRevision:number):Correction { if(balance.revision!==expectedRevision) throw new Error('Stale revision: reload before correcting.');if(!Number.isInteger(target)||target<0) throw new Error('Quantity must be a nonnegative integer.');return {...balance,available:target,revision:balance.revision+1,delta:target-balance.available}; }
+export function sale(balance:Balance,quantity:number):Balance { if(!Number.isInteger(quantity)||quantity<1) throw new Error('Invalid sale quantity.');if(balance.available<quantity) throw new Error('Insufficient stock.');return {...balance,available:balance.available-quantity,revision:balance.revision+1}; }
+export function qc(balance:Balance,returned:number,good:number,damaged:number):Balance { if(!Number.isInteger(returned)||good<0||damaged<0||good+damaged!==returned) throw new Error('QC allocations must equal returned quantity.');return {...balance,available:balance.available+good,damaged:balance.damaged+damaged,revision:balance.revision+1}; }
