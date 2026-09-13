@@ -11,4 +11,3 @@ if(!hashMatch)lines.push(`DASHBOARD_PASSWORD_HASH=${escapeEnv(await bcrypt.hash(
 if(!/^SESSION_SECRET=/m.test(text))lines.push(`SESSION_SECRET=${escapeEnv(randomBytes(32).toString('base64url'))}`);
 if(lines.length)writeFileSync(file,text+(text&&!text.endsWith('\n')?'\n':'')+lines.join('\n')+'\n');
 console.log(`Dashboard password (shown once): ${password}`);console.log('Existing configured values were preserved.');
--

@@ -20,6 +20,7 @@ export interface InventoryRepository {
   mappedSale(id: string, qty: number, event: string): Promise<void>;
   returnQc(id: string, returnId: string, qty: number, good: number, damaged: number): Promise<void>;
   createProduct(product: Product): Promise<void>;
+  deleteProduct(id: string): Promise<void>;
   purchase(id: string, qty: number, reason: string): Promise<void>;
   expense(amount: number, note: string): Promise<void>;
   commitImport(parsed: Parsed, associations: Record<string, string>): Promise<void>;
@@ -31,6 +32,7 @@ export class DemoRepository implements InventoryRepository {
   async mappedSale(_id: string, _qty: number, _event: string): Promise<void> { this.unavailable(); }
   async returnQc(_id: string, _returnId: string, _qty: number, _good: number, _damaged: number): Promise<void> { this.unavailable(); }
   async createProduct(_product: Product): Promise<void> { this.unavailable(); }
+  async deleteProduct(_id: string): Promise<void> { this.unavailable(); }
   async purchase(_id: string, _qty: number, _reason: string): Promise<void> { this.unavailable(); }
   async expense(_amount: number, _note: string): Promise<void> { this.unavailable(); }
   async commitImport(_parsed: Parsed, _associations: Record<string, string>): Promise<void> { this.unavailable(); }
@@ -69,13 +71,23 @@ export class MongoRepository implements InventoryRepository {
     await this.transaction(async (db, session) => {
       const record = await db.collection<ReturnQc>('returnQc').findOne({ returnId }, { session });
       if (!record || !record.pending) throw new Error('Return QC already completed.');
-      if (record.productId !== id || record.quantity !== qty) throw new Error('Return QC does not match the imported return.');
-      const product = await db.collection<Product>('products').findOne({ _id: id }, { session });
+      const productId = record.productId ?? id;
+      if (!productId || (record.productId && record.productId !== id)) throw new Error('Return QC does not match the imported return.');
+      if (record.productId === null) {
+        const event = await db.collection<OrderEvent>('orderEvents').findOne({ identity: returnId, type: 'returns' }, { session });
+        if (!event || event.productId !== null || event.quantity !== record.quantity) throw new Error('Return event cannot be associated.');
+        const eventResult = await db.collection<OrderEvent>('orderEvents').updateOne({ identity: returnId, type: 'returns', productId: null }, { $set: { productId, status: 'mapped' } }, { session });
+        if (!eventResult.modifiedCount) throw new Error('Return association conflict.');
+      }
+      if (record.quantity !== qty || good + damaged !== record.quantity) throw new Error('QC allocations must equal the imported return quantity.');
+      const product = await db.collection<Product>('products').findOne({ _id: productId }, { session });
       if (!product) throw new Error('Product not found');
-      const next = qc(product, qty, good, damaged);
-      await db.collection<Product>('products').updateOne({ _id: id }, { $set: { available: next.available, damaged: next.damaged, updatedAt: now() }, $inc: { revision: 1 } }, { session });
-      await db.collection<ReturnQc>('returnQc').updateOne({ returnId, pending: true }, { $set: { good, damaged, pending: false } }, { session });
-      await db.collection<StockMovement>('stockMovements').insertMany([{ productId: id, delta: good, source: 'return-qc', createdAt: now() }, { productId: id, damagedDelta: damaged, source: 'return-qc', createdAt: now() }], { session });
+      const next = qc(product, record.quantity, good, damaged);
+      const productResult = await db.collection<Product>('products').updateOne({ _id: productId, revision: product.revision }, { $set: { available: next.available, damaged: next.damaged, updatedAt: now() }, $inc: { revision: 1 } }, { session });
+      if (!productResult.modifiedCount) throw new Error('Stock changed; reload and retry.');
+      const qcResult = await db.collection<ReturnQc>('returnQc').updateOne({ returnId, pending: true }, { $set: { productId, good, damaged, pending: false } }, { session });
+      if (!qcResult.modifiedCount) throw new Error('Return QC conflict.');
+      await db.collection<StockMovement>('stockMovements').insertOne({ productId, delta: good, damagedDelta: damaged, source: 'return-qc', reference: returnId, actor: 'operator', createdAt: now() }, { session });
     });
   }
 
@@ -84,6 +96,20 @@ export class MongoRepository implements InventoryRepository {
       const createdAt = now();
       await db.collection<Product>('products').insertOne({ ...product, createdAt, updatedAt: createdAt }, { session });
       await db.collection<StockMovement>('stockMovements').insertOne({ productId: product._id, delta: product.available, source: 'opening', reason: 'Opening stock', actor: 'operator', createdAt }, { session });
+    });
+  }
+
+  async deleteProduct(id: string): Promise<void> {
+    await this.transaction(async (db, session) => {
+      const product = await db.collection<Product>('products').findOne({ _id: id }, { session });
+      if (!product) throw new Error('Product not found');
+      const [sales, returns] = await Promise.all([
+        db.collection<OrderEvent>('orderEvents').countDocuments({ productId: id }, { session }),
+        db.collection<ReturnQc>('returnQc').countDocuments({ productId: id }, { session }),
+      ]);
+      if (sales || returns) throw new Error('Products with imported history cannot be deleted.');
+      const result = await db.collection<Product>('products').deleteOne({ _id: id }, { session });
+      if (!result.deletedCount) throw new Error('Product was already deleted.');
     });
   }
 
