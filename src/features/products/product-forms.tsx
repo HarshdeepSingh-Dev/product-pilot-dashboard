@@ -1,59 +1,237 @@
-'use client';
+"use client";
 
-import { useActionState, useEffect, useState, type ReactNode } from 'react';
-import { createProduct, deleteProduct, manualCorrection } from '@/app/actions/inventory';
+import { useActionState, useState, type ReactNode } from "react";
+import { CheckCircle2, LoaderCircle, MoreHorizontal, PackagePlus, PencilLine, Trash2 } from "lucide-react";
 
-type FormState = { formError?: string; ok?: boolean; fieldErrors?: Record<string, string[] | undefined> };
+import { createProduct, deleteProduct, manualCorrection } from "@/app/actions/inventory";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import {
+  AlertDialog,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogMedia,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+
+type FormState = {
+  formError?: string;
+  ok?: boolean;
+  fieldErrors?: Record<string, string[] | undefined>;
+};
 type Action = (state: FormState, formData: FormData) => Promise<FormState>;
 
-function Form({ action, children, disabled }: { action: Action; children: ReactNode; disabled: boolean }) {
+function ActionForm({
+  action,
+  children,
+  disabled,
+  submitLabel = "Save changes",
+}: {
+  action: Action;
+  children: ReactNode;
+  disabled: boolean;
+  submitLabel?: string;
+}) {
   const [state, submit, pending] = useActionState(action, {} as FormState);
-  return <form action={submit} className="card space-y-3" aria-busy={pending}>
-    {state.formError && <div role="alert" className="rounded-md bg-red-50 p-3 text-red-800">{state.formError}</div>}
-    {state.ok && <p role="status" className="text-green-700">Saved successfully.</p>}
-    <fieldset disabled={disabled || pending} className="space-y-3">{children}<button className="btn" disabled={pending}>{pending ? 'Saving…' : 'Save'}</button></fieldset>
-    {disabled && <p role="status" className="text-slate-600">Connect MongoDB to save changes.</p>}
-  </form>;
+
+  return (
+    <form action={submit} className="space-y-5" aria-busy={pending}>
+      {state.formError && (
+        <Alert variant="destructive">
+          <AlertDescription>{state.formError}</AlertDescription>
+        </Alert>
+      )}
+      {state.ok && (
+        <Alert className="border-emerald-200 bg-emerald-50 text-emerald-800">
+          <CheckCircle2 />
+          <AlertDescription className="text-emerald-700">Saved successfully.</AlertDescription>
+        </Alert>
+      )}
+      <fieldset disabled={disabled || pending} className="space-y-4">
+        {children}
+        <Button type="submit" className="w-full sm:w-auto" disabled={pending}>
+          {pending && <LoaderCircle className="animate-spin" data-icon="inline-start" />}
+          {pending ? "Saving…" : submitLabel}
+        </Button>
+      </fieldset>
+      {disabled && (
+        <p role="status" className="text-sm text-muted-foreground">
+          Connect MongoDB to save changes.
+        </p>
+      )}
+    </form>
+  );
+}
+
+function FormField({ label, htmlFor, children }: { label: string; htmlFor: string; children: ReactNode }) {
+  return (
+    <div className="space-y-2">
+      <Label htmlFor={htmlFor}>{label}</Label>
+      {children}
+    </div>
+  );
 }
 
 export function CreateProduct({ disabled }: { disabled: boolean }) {
-  const [open, setOpen] = useState(false);
-  useEffect(() => {
-    if (!open) return;
-    const closeOnEscape = (event: KeyboardEvent) => { if (event.key === 'Escape') setOpen(false); };
-    document.addEventListener('keydown', closeOnEscape);
-    return () => document.removeEventListener('keydown', closeOnEscape);
-  }, [open]);
-  return <>
-    <button type="button" className="btn" disabled={disabled} onClick={() => setOpen(true)}>Add new product</button>
-    {open && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setOpen(false); }}>
-      <div className="modal" role="dialog" aria-modal="true" aria-labelledby="create-product-title">
-        <div className="flex items-start justify-between gap-4"><div><h2 id="create-product-title" className="text-xl font-bold">Create product</h2><p className="mt-1 text-sm text-slate-600">Add a product and its opening stock.</p></div><button type="button" className="modal-close" onClick={() => setOpen(false)} aria-label="Close create product dialog">×</button></div>
-        <div className="mt-4"><Form action={createProduct} disabled={disabled}><fieldset><label className="block font-medium">Name<input className="input mt-1" name="name" required /></label><label className="mt-3 block font-medium">Product ID<input className="input mt-1" name="id" required /></label><label className="mt-3 block font-medium">SKU<input className="input mt-1" name="sku" /></label><label className="mt-3 block font-medium">Unit cost (rupees)<input className="input mt-1" name="unitCost" type="number" min="0" step="0.01" required /></label><label className="mt-3 block font-medium">Opening units<input className="input mt-1" name="opening" type="number" min="0" required /></label></fieldset></Form></div>
-      </div>
-    </div>}
-  </>;
+  return (
+    <Dialog>
+      <DialogTrigger asChild>
+        <Button disabled={disabled}>
+          <PackagePlus data-icon="inline-start" />
+          Add product
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="max-h-[calc(100vh-2rem)] overflow-y-auto sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Create product</DialogTitle>
+          <DialogDescription>Add a catalog item and set its opening stock balance.</DialogDescription>
+        </DialogHeader>
+        <ActionForm action={createProduct} disabled={disabled} submitLabel="Create product">
+          <div className="grid gap-4 sm:grid-cols-2">
+            <FormField label="Product name" htmlFor="product-name">
+              <Input id="product-name" name="name" placeholder="e.g. Matte Lipstick" required />
+            </FormField>
+            <FormField label="Product ID" htmlFor="product-id">
+              <Input id="product-id" name="id" placeholder="e.g. LIP-ROSE" required />
+            </FormField>
+          </div>
+          <FormField label="SKU (optional)" htmlFor="product-sku">
+            <Input id="product-sku" name="sku" placeholder="e.g. LIP-ROSE-01" />
+          </FormField>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <FormField label="Unit cost (₹)" htmlFor="product-cost">
+              <Input id="product-cost" name="unitCost" type="number" min="0" step="0.01" placeholder="0.00" required />
+            </FormField>
+            <FormField label="Opening units" htmlFor="product-opening">
+              <Input id="product-opening" name="opening" type="number" min="0" placeholder="0" required />
+            </FormField>
+          </div>
+        </ActionForm>
+      </DialogContent>
+    </Dialog>
+  );
 }
 
-export function Correction({ id, revision, disabled }: { id: string; revision: number; disabled: boolean }) {
-  const [open, setOpen] = useState(false);
-  return <>
-    <button type="button" className="menu-item" onClick={() => setOpen(true)}>Edit stock</button>
-    {open && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setOpen(false); }}>
-      <div className="modal" role="dialog" aria-modal="true" aria-labelledby={`correction-title-${id}`}>
-        <div className="flex items-start justify-between gap-4"><div><h2 id={`correction-title-${id}`} className="text-xl font-bold">Correct stock</h2><p className="mt-1 text-sm text-slate-600">Update the available quantity and record the reason.</p></div><button type="button" className="modal-close" onClick={() => setOpen(false)} aria-label="Close stock correction dialog">×</button></div>
-        <div className="mt-4"><Form action={manualCorrection} disabled={disabled}><fieldset><input type="hidden" name="id" value={id} /><input type="hidden" name="revision" value={revision} /><label className="block font-medium">Target quantity<input className="input mt-1" name="target" type="number" min="0" required /></label><label className="mt-3 block font-medium">Reason<input className="input mt-1" name="reason" minLength={3} required /></label></fieldset></Form></div>
-      </div>
-    </div>}
-  </>;
+function StockCorrectionDialog({
+  id,
+  revision,
+  disabled,
+  open,
+  onOpenChange,
+}: {
+  id: string;
+  revision: number;
+  disabled: boolean;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Correct stock</DialogTitle>
+          <DialogDescription>Set the available quantity and leave an audit reason.</DialogDescription>
+        </DialogHeader>
+        <ActionForm action={manualCorrection} disabled={disabled}>
+          <input type="hidden" name="id" value={id} />
+          <input type="hidden" name="revision" value={revision} />
+          <FormField label="Target quantity" htmlFor={`target-${id}`}>
+            <Input id={`target-${id}`} name="target" type="number" min="0" required />
+          </FormField>
+          <FormField label="Reason" htmlFor={`reason-${id}`}>
+            <Input id={`reason-${id}`} name="reason" minLength={3} placeholder="Why is this correction needed?" required />
+          </FormField>
+        </ActionForm>
+      </DialogContent>
+    </Dialog>
+  );
 }
 
 export function ProductMenu({ id, revision, disabled }: { id: string; revision: number; disabled: boolean }) {
-  const [open, setOpen] = useState(false);
+  const [correctionOpen, setCorrectionOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
   const deleteAction: Action = async (state, data) => deleteProduct(state, data);
   const [state, submit, pending] = useActionState(deleteAction, {} as FormState);
-  return <div className="relative">
-    <button type="button" className="icon-button" aria-label="Product actions" aria-expanded={open} onClick={() => setOpen((value) => !value)}>⋯</button>
-    {open && <div className="product-menu" role="menu"><Correction id={id} revision={revision} disabled={disabled} /><form action={submit}><input type="hidden" name="id" value={id} /><button type="submit" className="menu-item menu-danger" disabled={disabled || pending} onClick={(event) => { if (!window.confirm('Delete this product? This cannot be undone.')) event.preventDefault(); }}>{pending ? 'Deleting…' : 'Delete product'}</button></form>{state.formError && <p role="alert" className="menu-error">{state.formError}</p>}</div>}
-  </div>;
+
+  return (
+    <>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button type="button" variant="ghost" size="icon-sm" aria-label="Product actions">
+            <MoreHorizontal />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-48">
+          <DropdownMenuLabel>Product actions</DropdownMenuLabel>
+          <DropdownMenuItem disabled={disabled} onSelect={() => setCorrectionOpen(true)}>
+            <PencilLine />
+            Edit stock
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem variant="destructive" disabled={disabled} onSelect={() => setDeleteOpen(true)}>
+            <Trash2 />
+            Delete product
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+
+      <StockCorrectionDialog
+        id={id}
+        revision={revision}
+        disabled={disabled}
+        open={correctionOpen}
+        onOpenChange={setCorrectionOpen}
+      />
+
+      <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogMedia className="bg-red-50 text-destructive">
+              <Trash2 />
+            </AlertDialogMedia>
+            <AlertDialogTitle>Delete this product?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This permanently removes the product. Products referenced by inventory events cannot be deleted.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          {state.formError && (
+            <Alert variant="destructive">
+              <AlertDescription>{state.formError}</AlertDescription>
+            </Alert>
+          )}
+          <form action={submit}>
+            <input type="hidden" name="id" value={id} />
+            <AlertDialogFooter>
+              <AlertDialogCancel type="button" disabled={pending}>Cancel</AlertDialogCancel>
+              <Button type="submit" variant="destructive" disabled={pending}>
+                {pending && <LoaderCircle className="animate-spin" data-icon="inline-start" />}
+                {pending ? "Deleting…" : "Delete product"}
+              </Button>
+            </AlertDialogFooter>
+          </form>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
+  );
 }

@@ -1,50 +1,59 @@
-import Link from 'next/link';
-import { orderEvents } from '@/lib/server/reads';
+import Link from "next/link";
+import { Upload } from "lucide-react";
 
-function StatusBadge({ status }: { status: string }) {
-  const cls = status === 'mapped' ? 'badge-green'
-    : status === 'mapping-needed' ? 'badge-red'
-    : status === 'pending' || status === 'processing' ? 'badge-amber'
-    : 'badge';
-  return <span className={cls}>{status.replace(/-/g, ' ')}</span>;
-}
+import { PageHeader, StatusBadge, TableEmpty } from "@/components/dashboard-ui";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { orderEvents } from "@/lib/server/reads";
 
 export default async function Orders() {
   const rows = await orderEvents();
+
   return (
-    <section>
-      <h1 className="text-3xl font-bold">Orders</h1>
-      <p className="mt-2 text-slate-600">Imported sale events from uploaded spreadsheets.</p>
-      <div className="card table-wrap mt-5">
-        <table className="table">
-          <caption>Imported order events</caption>
-          <thead>
-            <tr>
-              <th scope="col">Date</th>
-              <th scope="col">Sub-order</th>
-              <th scope="col">Quantity</th>
-              <th scope="col">Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.length ? rows.map((row) => (
-              <tr key={row.identity}>
-                <td>{row.date || '—'}</td>
-                <td>{row.subOrderNumber}</td>
-                <td className="num">{row.quantity}</td>
-                <td><StatusBadge status={row.status} /></td>
-              </tr>
-            )) : (
-              <tr>
-                <td colSpan={4} className="text-slate-500">
-                  No imported orders yet.{' '}
-                  <Link href="/imports" className="text-blue-600 underline">Upload a sales slip.</Link>
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
-    </section>
+    <div className="space-y-6">
+      <PageHeader
+        eyebrow="Sales"
+        title="Orders"
+        description="Review sale events imported from marketplace spreadsheets."
+        actions={
+          <Button asChild>
+            <Link href="/imports"><Upload data-icon="inline-start" />Import orders</Link>
+          </Button>
+        }
+      />
+      <Card className="shadow-sm shadow-slate-200/40">
+        <CardHeader className="border-b">
+          <CardTitle>Imported order events</CardTitle>
+          <CardDescription>{rows.length} event{rows.length !== 1 ? "s" : ""} recorded</CardDescription>
+        </CardHeader>
+        <CardContent className="px-0">
+          <Table>
+            <TableHeader>
+              <TableRow className="hover:bg-transparent">
+                <TableHead className="pl-4">Date</TableHead>
+                <TableHead>Sub-order</TableHead>
+                <TableHead className="text-right">Quantity</TableHead>
+                <TableHead className="pr-4 text-right">Status</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {rows.length ? rows.map((row) => (
+                <TableRow key={row.identity}>
+                  <TableCell className="pl-4 text-muted-foreground">{row.date || "—"}</TableCell>
+                  <TableCell className="font-medium">{row.subOrderNumber}</TableCell>
+                  <TableCell className="num text-right">{row.quantity}</TableCell>
+                  <TableCell className="pr-4 text-right"><StatusBadge status={row.status} /></TableCell>
+                </TableRow>
+              )) : (
+                <TableEmpty colSpan={4}>
+                  No orders yet. <Link href="/imports" className="font-medium text-primary hover:underline">Upload a sales slip.</Link>
+                </TableEmpty>
+              )}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+    </div>
   );
 }
