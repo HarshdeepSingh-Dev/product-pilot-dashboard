@@ -18,6 +18,8 @@ import {
 } from "@/components/ui/sidebar";
 import { authenticated, logout } from "@/lib/server/auth";
 
+export const dynamic = "force-dynamic";
+
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   if (!(await authenticated())) redirect("/login");
 
